@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
 
     // Trigger transcription processing in the background
     // This is fire-and-forget - we don't await the result
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${process.env.PORT || 3000}`
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL 
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:3000`)
     fetch(`${baseUrl}/api/recordings/process-transcription`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
