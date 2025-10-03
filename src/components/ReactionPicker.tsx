@@ -75,7 +75,7 @@ export default function ReactionPicker({ onSelectEmoji, onClose, position }: Rea
     return () => window.removeEventListener('scroll', handleScroll, true)
   }, [onClose])
 
-  const handleEmojiSelect = (emoji: any) => {
+  const handleEmojiSelect = (emoji: { native: string }) => {
     onSelectEmoji(emoji.native)
     onClose()
   }
