@@ -82,10 +82,10 @@ export async function GET(request: NextRequest) {
       recordings: recordingsWithNumbers
     })
     
-    // Cache for 30 seconds with stale-while-revalidate
+    // No cache - always fetch fresh data for list view
     response.headers.set(
       'Cache-Control',
-      'public, s-maxage=30, stale-while-revalidate=60'
+      'no-store, must-revalidate'
     )
     
     return response

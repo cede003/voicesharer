@@ -66,10 +66,11 @@ export async function GET(
       recordingNumber
     })
     
-    // Add cache headers: 60s cache, 120s stale-while-revalidate
+    // Short cache for dynamic content (comments/reactions change frequently)
+    // Cache for 5s on CDN, allow browser to cache for 5s
     response.headers.set(
       'Cache-Control',
-      'public, s-maxage=60, stale-while-revalidate=120'
+      'public, s-maxage=5, max-age=5, must-revalidate'
     )
     
     return response

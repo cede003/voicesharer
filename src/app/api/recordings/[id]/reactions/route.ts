@@ -55,6 +55,7 @@ export async function POST(
 
     // Revalidate cache for this recording and home page
     revalidatePath(`/playback/${recordingId}`)
+    revalidatePath(`/api/recordings/${recordingId}`)
     revalidatePath('/')
 
     return NextResponse.json({ reaction }, { status: 201 })

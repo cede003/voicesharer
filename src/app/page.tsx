@@ -42,6 +42,22 @@ export default function Home() {
     fetchRecordings()
   }, [])
 
+  // Refetch recordings when user returns to the page
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Page is visible again, refetch recordings
+        fetchRecordings()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
   const fetchRecordings = async () => {
     try {
       setIsLoadingRecordings(true)

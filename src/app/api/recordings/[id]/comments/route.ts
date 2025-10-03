@@ -143,8 +143,9 @@ export async function POST(
     
     console.log('[Comments API] Comment created:', comment.id)
     
-    // Revalidate cache for this recording and home page
+    // Revalidate cache for this recording, API route, and home page
     revalidatePath(`/playback/${recordingId}`)
+    revalidatePath(`/api/recordings/${recordingId}`)
     revalidatePath('/')
     
     return NextResponse.json({ comment }, { status: 201 })
