@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { Prisma } from '@/generated/prisma'
 import { uploadAudioFile } from '@/lib/storage'
 import { getFileExtension } from '@/utils/formatters'
-import { transcribeAudio, generateChapters } from '@/lib/transcription'
 
-// Increase timeout for transcription (max 300s on Vercel Pro, 60s on Hobby)
-export const maxDuration = 60
+// Upload should be quick (just file upload + DB insert)
+export const maxDuration = 10
 
 
 export async function POST(request: NextRequest) {
@@ -55,15 +53,13 @@ export async function POST(request: NextRequest) {
     })
     
     // Mark recording as processing
+    // The client will trigger the transcription endpoint when it loads the playback page
     await prisma.recording.update({
       where: { id: recording.id },
       data: { status: 'processing' }
     })
-
-    // Start transcription in the background (don't await)
-    processTranscriptionInBackground(recording.id, uploadResult.url).catch(err => 
-      console.error('Background transcription failed:', err)
-    )
+    
+    console.log(`Recording ${recording.id} uploaded, queued for transcription`)
     
     return NextResponse.json({
       id: recording.id,
@@ -81,44 +77,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Background transcription processing
-async function processTranscriptionInBackground(recordingId: string, audioUrl: string) {
-  try {
-    console.log(`Starting transcription for recording ${recordingId}`)
-    
-    const transcription = await transcribeAudio(audioUrl)
-    
-    // Generate chapters from the transcript
-    const chapters = await generateChapters(
-      transcription.fullText,
-      transcription.wordTimestamps
-    )
-    
-    // Update recording with transcript and chapters
-    await prisma.transcript.create({
-      data: {
-        recordingId: recordingId,
-        fullText: transcription.fullText,
-        wordTimestamps: transcription.wordTimestamps as unknown as Prisma.InputJsonValue,
-        chapters: chapters.length > 0 ? (chapters as unknown as Prisma.InputJsonValue) : Prisma.JsonNull
-      }
-    })
-    
-    // Update recording status
-    await prisma.recording.update({
-      where: { id: recordingId },
-      data: { status: 'completed' }
-    })
-    
-    console.log(`Successfully transcribed recording ${recordingId} with ${chapters.length} chapters`)
-    
-  } catch (error) {
-    console.error(`Transcription failed for recording ${recordingId}:`, error)
-    
-    // Update recording status to failed
-    await prisma.recording.update({
-      where: { id: recordingId },
-      data: { status: 'failed' }
-    })
-  }
-}

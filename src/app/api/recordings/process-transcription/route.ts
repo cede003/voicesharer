@@ -6,26 +6,51 @@ import { transcribeAudio, generateChapters } from '@/lib/transcription'
 // Increase timeout for transcription (max 60s on Vercel Hobby, 300s on Pro)
 export const maxDuration = 60
 
-// This endpoint can be called by Vercel Cron Jobs or external services
-// to process pending transcriptions
+// This endpoint can be called by clients or cron jobs to process transcriptions
 export async function POST(request: NextRequest) {
   try {
-    // Get all recordings with 'processing' status that don't have transcripts
-    const pendingRecordings = await prisma.recording.findMany({
-      where: {
-        status: 'processing',
-        transcript: null
-      },
-      select: {
-        id: true,
-        audioUrl: true,
-        name: true
-      },
-      orderBy: {
-        createdAt: 'asc'
-      },
-      take: 5 // Process up to 5 recordings at a time
-    })
+    const body = await request.json().catch(() => ({}))
+    const { recordingId } = body
+    
+    // If a specific recording ID is provided, process only that one
+    let pendingRecordings
+    if (recordingId) {
+      const recording = await prisma.recording.findUnique({
+        where: { id: recordingId },
+        select: {
+          id: true,
+          audioUrl: true,
+          name: true,
+          status: true
+        }
+      })
+      
+      if (!recording || recording.status !== 'processing') {
+        return NextResponse.json({
+          message: 'Recording not found or not in processing state',
+          processed: 0
+        })
+      }
+      
+      pendingRecordings = [recording]
+    } else {
+      // Get all recordings with 'processing' status that don't have transcripts
+      pendingRecordings = await prisma.recording.findMany({
+        where: {
+          status: 'processing',
+          transcript: null
+        },
+        select: {
+          id: true,
+          audioUrl: true,
+          name: true
+        },
+        orderBy: {
+          createdAt: 'asc'
+        },
+        take: 5 // Process up to 5 recordings at a time
+      })
+    }
 
     if (pendingRecordings.length === 0) {
       return NextResponse.json({

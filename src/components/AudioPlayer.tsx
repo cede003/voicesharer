@@ -176,7 +176,7 @@ export default function AudioPlayer({ audioUrl, transcript, comments, reactions,
                 Transcription in progress
               </p>
               <p className="text-xs text-yellow-600">
-                You can listen to the audio while we process the transcript
+                This may take a few minutes. You can listen to the audio while we process the transcript.
               </p>
             </div>
           </div>

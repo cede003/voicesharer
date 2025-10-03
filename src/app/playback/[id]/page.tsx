@@ -81,12 +81,51 @@ export default function PlaybackPage() {
     }
   }, [params.id])
 
+  // Trigger transcription when recording is in processing state
+  useEffect(() => {
+    if (!recording || recording.status !== 'processing') return
+
+    // Check if transcription has already been triggered
+    const hasTriggered = sessionStorage.getItem(`transcription-triggered-${recording.id}`)
+    
+    if (!hasTriggered) {
+      console.log('Triggering transcription for recording', recording.id)
+      // Mark as triggered to avoid duplicate calls
+      sessionStorage.setItem(`transcription-triggered-${recording.id}`, 'true')
+      
+      // Trigger the transcription process
+      fetch('/api/recordings/process-transcription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordingId: recording.id })
+      }).catch(err => {
+        console.error('Failed to trigger transcription:', err)
+        // Clear the flag so it can be retried
+        sessionStorage.removeItem(`transcription-triggered-${recording.id}`)
+      })
+    }
+  }, [recording])
+
   // Poll for status updates when processing
   useEffect(() => {
     if (!recording || recording.status !== 'processing') return
 
+    let pollCount = 0
+    const MAX_POLL_COUNT = 180 // 180 * 3s = 9 minutes max (transcription can take time)
+    
     const pollInterval = setInterval(async () => {
       try {
+        pollCount++
+        
+        // Stop polling after max time
+        if (pollCount >= MAX_POLL_COUNT) {
+          clearInterval(pollInterval)
+          console.warn('Stopped polling after 9 minutes')
+          // Clear the trigger flag in case user wants to retry
+          sessionStorage.removeItem(`transcription-triggered-${recording.id}`)
+          return
+        }
+
         const response = await fetch(`/api/recordings/${params.id}`)
         if (response.ok) {
           const data = await response.json()
@@ -95,12 +134,14 @@ export default function PlaybackPage() {
           // Stop polling if status changed
           if (data.status !== 'processing') {
             clearInterval(pollInterval)
+            // Clear the trigger flag on completion
+            sessionStorage.removeItem(`transcription-triggered-${recording.id}`)
           }
         }
       } catch (error) {
         console.error('Error polling recording status:', error)
       }
-    }, 2000) // Poll every 2 seconds
+    }, 3000) // Poll every 3 seconds (less aggressive)
 
     return () => clearInterval(pollInterval)
   }, [recording, params.id])
