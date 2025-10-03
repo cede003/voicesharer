@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/recordings/process-transcription",
-      "schedule": "*/2 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
