@@ -1,7 +1,6 @@
 import OpenAI from 'openai'
 import fs from 'fs'
 import path from 'path'
-import { Readable } from 'stream'
 
 /**
  * OpenAI Whisper API integration for audio transcription
@@ -86,7 +85,7 @@ export async function transcribeAudio(audioUrl: string): Promise<TranscriptionRe
     const wordTimestamps: WordTimestamp[] = []
     
     if (transcription.words) {
-      transcription.words.forEach((wordData: any) => {
+      transcription.words.forEach((wordData: { word: string; start: number; end: number }) => {
         wordTimestamps.push({
           word: wordData.word.trim(),
           startTime: wordData.start,
@@ -208,7 +207,7 @@ function parseChapterResponse(content: string): Array<{
     const parsed = JSON.parse(content)
     // Handle both array and object with chapters key
     return Array.isArray(parsed) ? parsed : (parsed.chapters || [])
-  } catch (e) {
+  } catch {
     console.error('Failed to parse OpenAI response:', content)
     throw new Error('Invalid JSON response from OpenAI')
   }

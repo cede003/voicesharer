@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@/generated/prisma'
 import { uploadAudioFile } from '@/lib/storage'
 import { transcribeAudio, generateChapters } from '@/lib/transcription'
 import { getFileExtension } from '@/utils/formatters'
@@ -69,8 +70,8 @@ export async function POST(request: NextRequest) {
           data: {
             recordingId: recording.id,
             fullText: transcription.fullText,
-            wordTimestamps: transcription.wordTimestamps as any, // Cast to any for JSON field
-            chapters: chapters.length > 0 ? (chapters as any) : null // Only include if we have chapters
+            wordTimestamps: transcription.wordTimestamps as unknown as Prisma.InputJsonValue,
+            chapters: chapters.length > 0 ? (chapters as unknown as Prisma.InputJsonValue) : Prisma.JsonNull
           }
         })
         

@@ -35,7 +35,7 @@ export async function uploadAudioFile(
     return uploadToS3(file, key, contentType)
   } else {
     const key = `audio/${uuidv4()}-${fileName}`
-    return uploadToLocal(file, key, contentType)
+    return uploadToLocal(file, key)
   }
 }
 
@@ -68,7 +68,6 @@ async function uploadToS3(
 async function uploadToLocal(
   file: Buffer,
   key: string,
-  contentType: string
 ): Promise<UploadResult> {
   const uploadDir = process.env.UPLOAD_DIR || './uploads'
   const filePath = path.join(uploadDir, key)

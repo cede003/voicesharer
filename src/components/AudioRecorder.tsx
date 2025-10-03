@@ -174,7 +174,7 @@ export default function AudioRecorder({ onRecordingComplete, onError, onRecordin
         
         {recordingName && !isRecording && (
           <p className="text-lg text-blue-600 font-medium mb-2">
-            "{recordingName}"
+            &ldquo;{recordingName}&rdquo;
           </p>
         )}
         {isRecording && (

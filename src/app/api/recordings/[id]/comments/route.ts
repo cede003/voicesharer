@@ -148,7 +148,7 @@ export async function POST(
     console.error('[Comments API] Error creating comment:', error)
     console.error('[Comments API] Error details:', error instanceof Error ? error.message : String(error))
     if (error instanceof Error && 'code' in error) {
-      console.error('[Comments API] Error code:', (error as any).code)
+      console.error('[Comments API] Error code:', (error as { code: string }).code)
     }
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
