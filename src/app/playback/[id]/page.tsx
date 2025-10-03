@@ -306,7 +306,7 @@ export default function PlaybackPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="bg-red-100 text-red-800 px-6 py-4 rounded-lg max-w-md">
+          <div className="bg-red-100 text-red-800 px-6 py-4 rounded-lg max-w-4xl mx-auto">
             <h2 className="text-xl font-semibold mb-2">Error</h2>
             <p>{error || 'Recording not found'}</p>
             <Link 
@@ -457,29 +457,12 @@ export default function PlaybackPage() {
 
         {/* Audio Player and Transcript */}
         {isLoadingComments || isLoadingReactions ? (
-          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center max-w-4xl mx-auto">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
             <p className="text-gray-600 text-sm">Loading...</p>
           </div>
         ) : (
           <>
-            {/* Processing notification banner */}
-            {recording.status === 'processing' && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-center">
-                <div className="flex items-center justify-center space-x-3">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-600"></div>
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-yellow-800">
-                      Transcription in progress
-                    </p>
-                    <p className="text-xs text-yellow-600">
-                      You can listen to the audio while we process the transcript
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <AudioPlayer 
               audioUrl={recording.audioUrl}
               transcript={recording.transcript || undefined}
@@ -490,6 +473,7 @@ export default function PlaybackPage() {
               onPlay={handlePlay}
               onEnded={handleEnded}
               failed={recording.status === 'failed'}
+              processing={recording.status === 'processing'}
             />
             
             {/* AI Q&A Chat - only show if transcription succeeded */}

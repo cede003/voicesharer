@@ -6,7 +6,7 @@ import AudioControls from './AudioControls'
 import ChapterDisplay from './ChapterDisplay'
 import { AudioPlayerProps } from '@/types/audio'
 
-export default function AudioPlayer({ audioUrl, transcript, comments, reactions, onAddComment, onAddReaction, onPlay, onEnded, failed }: AudioPlayerProps) {
+export default function AudioPlayer({ audioUrl, transcript, comments, reactions, onAddComment, onAddReaction, onPlay, onEnded, failed, processing }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -165,6 +165,21 @@ export default function AudioPlayer({ audioUrl, transcript, comments, reactions,
             We encountered an error while transcribing your recording. 
             You can still listen to the audio above.
           </p>
+        </div>
+      ) : processing ? (
+        /* Show processing message if transcription is in progress */
+        <div className="mt-6 bg-yellow-50 border border-yellow-200 px-6 py-4 rounded-lg">
+          <div className="flex items-center justify-center space-x-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-600"></div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-yellow-800">
+                Transcription in progress
+              </p>
+              <p className="text-xs text-yellow-600">
+                You can listen to the audio while we process the transcript
+              </p>
+            </div>
+          </div>
         </div>
       ) : transcript ? (
         /* Transcript - Chapter-based display with inline comments */

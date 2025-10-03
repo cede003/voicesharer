@@ -35,6 +35,7 @@ export interface AudioPlayerProps {
   onPlay?: () => void
   onEnded?: () => void
   failed?: boolean
+  processing?: boolean
 }
 
 export interface AudioControlsProps {
