@@ -3,6 +3,7 @@
 /* Container - full width, no background, flush with UI */
 .rhap_container {
   width: 100% !important;
+  max-width: 100% !important;
   background: transparent !important;
   box-shadow: none !important;
   padding: 0 !important;
@@ -10,6 +11,7 @@
   flex-direction: row !important;
   align-items: center !important;
   gap: 12px !important;
+  overflow: hidden !important;
 }
 
 /* Controls section - fixed width on the left */
@@ -58,18 +60,21 @@
 
 /* Progress section - expand to fill remaining width as direct child of container */
 .rhap_progress-section {
-  flex: 1 !important;
+  flex: 1 1 auto !important;
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
   min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
 }
 
 /* Progress container - take up all available space within progress section */
 .rhap_progress-container {
-  flex: 1 !important;
+  flex: 1 1 auto !important;
   margin: 0 !important;
   min-width: 0 !important;
+  max-width: 100% !important;
 }
 
 /* Make progress bar blue */
@@ -82,12 +87,20 @@
   background-color: #E5E7EB !important; /* Tailwind gray-200 */
 }
 
+/* Constrain download progress to never exceed 100% */
+.rhap_download-progress {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
 /* Style the time display */
 .rhap_time {
   color: #4B5563 !important; /* Tailwind gray-600 */
   font-size: 0.875rem !important; /* text-sm */
   min-width: 48px !important;
+  flex-shrink: 0 !important;
   text-align: center !important;
+  white-space: nowrap !important;
 }
 
 /* Hide volume and additional controls */

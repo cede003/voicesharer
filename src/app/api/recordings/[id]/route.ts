@@ -10,13 +10,26 @@ export async function GET(
   try {
     const { id: recordingId } = await params
     
-    const recording = await prisma.recording.findUnique({
-      where: { id: recordingId },
-      include: {
-        transcript: true,
-        comments: true
-      }
-    })
+    // Single optimized query - batch all data at once
+    const [recording, reactions] = await Promise.all([
+      prisma.recording.findUnique({
+        where: { id: recordingId },
+        include: {
+          transcript: true,
+          comments: {
+            include: {
+              replies: true
+            },
+            orderBy: {
+              createdAt: 'desc'
+            }
+          }
+        }
+      }),
+      prisma.reaction.findMany({
+        where: { recordingId }
+      })
+    ])
     
     if (!recording) {
       return NextResponse.json(
@@ -25,25 +38,20 @@ export async function GET(
       )
     }
     
-    // Calculate recording number if no name provided
+    // Calculate recording number efficiently
     let recordingNumber = null
     if (!recording.name) {
-      // Get all recordings ordered by creation date to calculate the number
-      const allRecordings = await prisma.recording.findMany({
-        orderBy: {
-          createdAt: 'asc'
-        },
-        select: {
-          id: true,
-          createdAt: true
+      const count = await prisma.recording.count({
+        where: {
+          createdAt: {
+            lte: recording.createdAt
+          }
         }
       })
-      
-      // Find this recording's position (1-indexed)
-      recordingNumber = allRecordings.findIndex(r => r.id === recordingId) + 1
+      recordingNumber = count
     }
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       id: recording.id,
       name: recording.name,
       audioUrl: recording.audioUrl,
@@ -52,9 +60,19 @@ export async function GET(
       playCount: recording.playCount,
       lastPlayedAt: recording.lastPlayedAt,
       transcript: recording.transcript,
+      comments: recording.comments,
+      reactions: reactions,
       commentCount: recording.comments.length,
       recordingNumber
     })
+    
+    // Add cache headers: 60s cache, 120s stale-while-revalidate
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=60, stale-while-revalidate=120'
+    )
+    
+    return response
     
   } catch (error) {
     console.error('Error fetching recording:', error)

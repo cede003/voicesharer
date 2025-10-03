@@ -8,8 +8,6 @@ import { AudioControlsProps } from '@/types/audio'
 
 export default function AudioControls({
   audioUrl,
-  isPlaying,
-  onTogglePlayPause,
   onSeek,
   onTimeUpdate,
   onLoadedMetadata,
@@ -42,14 +40,12 @@ export default function AudioControls({
   }, [audioRef, onTimeUpdate])
 
   const handlePlay = () => {
-    // Update parent state and track play count
-    onTogglePlayPause()
+    // Track play event for analytics
     if (onPlay) onPlay()
   }
 
   const handlePause = () => {
-    // Update parent state
-    onTogglePlayPause()
+    // Pause event - no action needed (library handles state)
   }
 
   const handleListen = (e: Event) => {

@@ -8,6 +8,7 @@ export default function AudioRecorder({ onRecordingComplete, onError, onRecordin
   const [isRecording, setIsRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
+  const [countdown, setCountdown] = useState<number | null>(null)
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioStreamRef = useRef<MediaStream | null>(null)
@@ -48,6 +49,10 @@ export default function AudioRecorder({ onRecordingComplete, onError, onRecordin
 
   const startRecording = async () => {
     try {
+      // Start countdown
+      setCountdown(3)
+      
+      // Initialize media stream during countdown
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       audioStreamRef.current = stream
       
@@ -68,6 +73,14 @@ export default function AudioRecorder({ onRecordingComplete, onError, onRecordin
         }
       }
       
+      mediaRecorder.onstart = () => {
+        // Only set recording state when actually started
+        setIsRecording(true)
+        setRecordingTime(0)
+        setCountdown(null)
+        startTimer()
+      }
+      
       mediaRecorder.onstop = () => {
         // Only process the recording if it wasn't cancelled
         if (!isCancelledRef.current) {
@@ -83,10 +96,14 @@ export default function AudioRecorder({ onRecordingComplete, onError, onRecordin
         }
       }
       
+      // Countdown: 3... 2... 1... Start!
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      setCountdown(2)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      setCountdown(1)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
       mediaRecorder.start(100) // Collect data every 100ms
-      setIsRecording(true)
-      setRecordingTime(0)
-      startTimer()
       
       // Clear any previous errors when recording successfully starts
       if (onRecordingStart) {
@@ -94,6 +111,7 @@ export default function AudioRecorder({ onRecordingComplete, onError, onRecordin
       }
       
     } catch (error) {
+      setCountdown(null)
       onError('Unable to access microphone. Please check your permissions.')
     }
   }
@@ -147,8 +165,15 @@ export default function AudioRecorder({ onRecordingComplete, onError, onRecordin
     <div className="bg-white rounded-lg shadow-lg p-6 max-w-md mx-auto">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-2">
-          {isRecording ? 'Recording...' : 'Ready to Record'}
+          {countdown !== null ? 'Get Ready...' : isRecording ? 'Recording...' : 'Ready to Record'}
         </h2>
+        
+        {/* Countdown Display */}
+        {countdown !== null && (
+          <div className="text-6xl font-bold text-blue-600 my-4 animate-pulse">
+            {countdown}
+          </div>
+        )}
         
         {/* Recording Name Input - shown when not recording */}
         {!isRecording && onRecordingNameChange && (
@@ -187,7 +212,7 @@ export default function AudioRecorder({ onRecordingComplete, onError, onRecordin
       </div>
 
       <div className="flex justify-center space-x-4">
-        {!isRecording ? (
+        {!isRecording && countdown === null ? (
           <button
             onClick={startRecording}
             className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-full font-semibold transition-colors duration-200 flex items-center space-x-2"

@@ -27,6 +27,7 @@ export default function PlaybackPage() {
   useEffect(() => {
     const fetchRecording = async () => {
       try {
+        // Single API call now returns recording, comments, and reactions
         const response = await fetch(`/api/recordings/${params.id}`)
         
         if (!response.ok) {
@@ -38,46 +39,26 @@ export default function PlaybackPage() {
 
         const data = await response.json()
         setRecording(data)
+        
+        // Extract comments and reactions from the response
+        if (data.comments) {
+          setComments(data.comments)
+        }
+        if (data.reactions) {
+          setReactions(data.reactions)
+        }
       } catch (error) {
         console.error('Error fetching recording:', error)
         setError(error instanceof Error ? error.message : 'Failed to load recording')
       } finally {
         setLoading(false)
-      }
-    }
-
-    const fetchComments = async () => {
-      try {
-        const response = await fetch(`/api/recordings/${params.id}/comments`)
-        if (response.ok) {
-          const data = await response.json()
-          setComments(data.comments)
-        }
-      } catch (error) {
-        console.error('Error fetching comments:', error)
-      } finally {
         setIsLoadingComments(false)
-      }
-    }
-
-    const fetchReactions = async () => {
-      try {
-        const response = await fetch(`/api/recordings/${params.id}/reactions`)
-        if (response.ok) {
-          const data = await response.json()
-          setReactions(data.reactions)
-        }
-      } catch (error) {
-        console.error('Error fetching reactions:', error)
-      } finally {
         setIsLoadingReactions(false)
       }
     }
 
     if (params.id) {
       fetchRecording()
-      fetchComments()
-      fetchReactions()
     }
   }, [params.id])
 
@@ -106,44 +87,55 @@ export default function PlaybackPage() {
     }
   }, [recording])
 
-  // Poll for status updates when processing
+  // Poll for status updates when processing (optimized with exponential backoff)
   useEffect(() => {
     if (!recording || recording.status !== 'processing') return
 
     let pollCount = 0
-    const MAX_POLL_COUNT = 180 // 180 * 3s = 9 minutes max (transcription can take time)
+    const MAX_POLL_COUNT = 60 // Reduced max polls
+    let pollInterval = 3000 // Start with 3s
+    let timeoutId: NodeJS.Timeout
     
-    const pollInterval = setInterval(async () => {
+    const poll = async () => {
       try {
         pollCount++
         
-        // Stop polling after max time
+        // Stop polling after max attempts
         if (pollCount >= MAX_POLL_COUNT) {
-          clearInterval(pollInterval)
-          console.warn('Stopped polling after 9 minutes')
-          // Clear the trigger flag in case user wants to retry
+          console.warn('Stopped polling after max attempts')
           sessionStorage.removeItem(`transcription-triggered-${recording.id}`)
           return
         }
 
-        const response = await fetch(`/api/recordings/${params.id}`)
+        // Use fast edge status endpoint instead of full recording
+        const response = await fetch(`/api/recordings/${params.id}/status`)
         if (response.ok) {
           const data = await response.json()
-          setRecording(data)
           
-          // Stop polling if status changed
+          // Status changed - fetch full recording data
           if (data.status !== 'processing') {
-            clearInterval(pollInterval)
-            // Clear the trigger flag on completion
+            const fullResponse = await fetch(`/api/recordings/${params.id}`)
+            const fullData = await fullResponse.json()
+            setRecording(fullData)
+            if (fullData.comments) setComments(fullData.comments)
+            if (fullData.reactions) setReactions(fullData.reactions)
             sessionStorage.removeItem(`transcription-triggered-${recording.id}`)
+            return
           }
         }
+        
+        // Exponential backoff: 3s -> 5s -> 8s -> 13s -> max 30s
+        pollInterval = Math.min(Math.floor(pollInterval * 1.5), 30000)
+        timeoutId = setTimeout(poll, pollInterval)
+        
       } catch (error) {
         console.error('Error polling recording status:', error)
+        timeoutId = setTimeout(poll, pollInterval)
       }
-    }, 3000) // Poll every 3 seconds (less aggressive)
+    }
 
-    return () => clearInterval(pollInterval)
+    timeoutId = setTimeout(poll, pollInterval)
+    return () => clearTimeout(timeoutId)
   }, [recording, params.id])
 
   const copyShareUrl = () => {
@@ -262,6 +254,17 @@ export default function PlaybackPage() {
         // If it's a top-level comment, add it to the list
         setComments(prevComments => [data.comment, ...prevComments])
       }
+      
+      // Update comment count in recording
+      if (recording) {
+        setRecording({
+          ...recording,
+          commentCount: recording.commentCount + 1
+        })
+      }
+      
+      // Refresh to sync cache
+      router.refresh()
     } catch (error) {
       console.error('Error adding comment:', error)
       throw error
@@ -285,6 +288,9 @@ export default function PlaybackPage() {
       
       // Update reactions list
       setReactions(prevReactions => [...prevReactions, data.reaction])
+      
+      // Refresh to sync cache
+      router.refresh()
     } catch (error) {
       console.error('Error adding reaction:', error)
       throw error

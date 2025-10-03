@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 
 // GET comments for a recording
@@ -141,6 +142,10 @@ export async function POST(
     })
     
     console.log('[Comments API] Comment created:', comment.id)
+    
+    // Revalidate cache for this recording and home page
+    revalidatePath(`/playback/${recordingId}`)
+    revalidatePath('/')
     
     return NextResponse.json({ comment }, { status: 201 })
     

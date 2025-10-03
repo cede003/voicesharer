@@ -40,10 +40,8 @@ export interface AudioPlayerProps {
 
 export interface AudioControlsProps {
   audioUrl: string
-  isPlaying: boolean
   currentTime: number
   duration: number
-  onTogglePlayPause: () => void
   onSeek: (time: number) => void
   onTimeUpdate: (time: number) => void
   onLoadedMetadata: (duration: number) => void
@@ -72,7 +70,7 @@ export interface ChapterDisplayProps {
   replyToComment: string | null
   isSubmitting: boolean
   onJumpToChapter: (chapterIndex: number) => void
-  onJumpToWord: (startTime: number) => void
+  onJumpToWord: (startTime: number, chapterIndex: number) => void
   onToggleCommentForm: (chapterIndex: number) => void
   onSubmitComment: (userName: string, text: string, chapterIndex: number, parentId?: string) => Promise<void>
   onReply: (commentId: string, chapterIndex: number) => void

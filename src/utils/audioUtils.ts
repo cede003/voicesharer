@@ -30,25 +30,18 @@ export const createFallbackChapters = (fullText: string, wordTimestamps: WordTim
 
 /**
  * Finds the current chapter index based on current time
- * Handles edge cases for last chapter and empty chapters
- * Includes epsilon tolerance for browser audio precision
+ * Returns the index of the chapter where currentTime is between startTime and endTime
  */
 export const findCurrentChapterIndex = (currentTime: number, chapters: Chapter[]): number => {
   if (chapters.length === 0) return -1
 
-  // Add small epsilon (10ms) to account for browser audio precision limitations
-  // Browser currentTime has ~7 decimals, which may not match exact chapter boundaries
-  // This prevents missing the chapter highlight when seeking to exact startTime
-  const EPSILON = 0.01 // 10 milliseconds tolerance
-
-  return chapters.findIndex((chapter, idx) => {
-    const isLastChapter = idx === chapters.length - 1
-    if (isLastChapter) {
-      // Last chapter: include the end boundary
-      return currentTime >= (chapter.startTime - EPSILON) && currentTime <= (chapter.endTime + EPSILON)
-    } else {
-      // Other chapters: exclude the end boundary to avoid overlap with next chapter
-      return currentTime >= (chapter.startTime - EPSILON) && currentTime < (chapter.endTime - EPSILON)
+  // Find the chapter that contains the current time
+  for (let i = 0; i < chapters.length; i++) {
+    const chapter = chapters[i]
+    if (currentTime >= chapter.startTime && currentTime <= chapter.endTime) {
+      return i
     }
-  })
+  }
+
+  return -1
 }

@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
           data: { status: 'completed' }
         })
         
-        console.log(`Successfully transcribed recording ${recording.id} with ${chapters.length} chapters`)
+        console.log(`Successfully transcribed recording ${recording.id}`)
         
         results.push({
           recordingId: recording.id,

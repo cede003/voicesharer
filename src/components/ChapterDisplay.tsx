@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useRef } from 'react'
+import { diffWords } from 'diff'
 import { formatTime } from '@/utils/audioUtils'
 import { getWordsWithPunctuation, isCurrentToken, AlignedToken } from '@/utils/alignTranscript'
 import CommentList from './CommentList'
@@ -86,16 +87,51 @@ export default function ChapterDisplay({
     const fullText = chapters.map(ch => ch.sentences.join(' ')).join(' ')
     const tokens = getWordsWithPunctuation(fullText, wordTimestamps)
     
-    console.log('=== ALIGNMENT DEBUG ===')
-    console.log('Full text:', fullText)
-    console.log('Total wordTimestamps:', wordTimestamps.length)
-    console.log('Total aligned tokens:', tokens.length)
-    console.log('Word tokens (non-punctuation):', tokens.filter(t => !t.isPunctuation).length)
-    console.log('Punctuation tokens:', tokens.filter(t => t.isPunctuation).length)
-    console.log('First 20 aligned tokens:', tokens.slice(0, 20))
-    
     return tokens
   }, [chapters, wordTimestamps])
+
+  // Utility: Normalize words for matching (lowercase, no punctuation)
+  const normalize = (word: string): string => {
+    return word.toLowerCase().replace(/[.,?!;:"'()-]/g, '').trim()
+  }
+
+  // Utility: Tokenize text into words and separate punctuation
+  const tokenize = (text: string): Array<{ text: string; isPunctuation: boolean }> => {
+    const tokens: Array<{ text: string; isPunctuation: boolean }> = []
+    const parts = text.match(/\S+/g) || []
+    
+    for (const part of parts) {
+      const normalized = normalize(part)
+      if (normalized === '') {
+        // Pure punctuation
+        tokens.push({ text: part, isPunctuation: true })
+      } else if (normalized === part.toLowerCase()) {
+        // Just a word
+        tokens.push({ text: part, isPunctuation: false })
+      } else {
+        // Word with punctuation - separate them
+        // Extract leading punctuation
+        const leadMatch = part.match(/^[.,?!;:"'()-]+/)
+        if (leadMatch) {
+          tokens.push({ text: leadMatch[0], isPunctuation: true })
+        }
+        
+        // Extract the word
+        const wordMatch = part.match(/[a-zA-Z0-9']+/)
+        if (wordMatch) {
+          tokens.push({ text: wordMatch[0], isPunctuation: false })
+        }
+        
+        // Extract trailing punctuation
+        const trailMatch = part.match(/[.,?!;:"'()-]+$/)
+        if (trailMatch && trailMatch.index && trailMatch.index > 0) {
+          tokens.push({ text: trailMatch[0], isPunctuation: true })
+        }
+      }
+    }
+    
+    return tokens
+  }
 
   // Pre-compute all chapter tokens once (performance optimization)
   const chapterTokensMap = useMemo(() => {
@@ -104,65 +140,130 @@ export default function ChapterDisplay({
     chapters.forEach((chapter, chapterIndex) => {
       const chapterText = chapter.sentences.join(' ')
       
-      console.log(`\n=== CHAPTER ${chapterIndex} DEBUG ===`)
-      console.log('Chapter title:', chapter.title)
-      console.log('Chapter text:', chapterText)
+      // Tokenize chapter text
+      const chapterTokens = tokenize(chapterText)
       
-      // Match the chapter text directly with aligned tokens
-      // Extract just the words (no punctuation) from chapter text for matching
-      const chapterWords = chapterText.match(/[\w']+/g) || []
-      console.log('Chapter words to match:', chapterWords.length, chapterWords)
+      if (chapterTokens.length === 0) {
+        map.set(chapterIndex, [])
+        return
+      }
       
-      // Find where these words appear in the aligned tokens
-      const result: AlignedToken[] = []
-      let matchIndex = 0
-      let isMatching = false
+      const chapterStartTime = chapter.startTime
+      const chapterEndTime = chapter.endTime
       
-      for (let i = 0; i < alignedTokens.length; i++) {
-        const token = alignedTokens[i]
+      // Filter wordTimestamps to the chapter's time range (with buffer)
+      const relevantTimestamps = wordTimestamps.filter(wt => 
+        wt.startTime >= chapterStartTime - 2 && 
+        wt.startTime <= chapterEndTime + 2
+      )
+      
+      // Create normalized word sequences for diff
+      const chapterWords = chapterTokens.filter(t => !t.isPunctuation).map(t => normalize(t.text))
+      const whisperWords = relevantTimestamps.map(wt => normalize(wt.word))
+      
+      // Use diff library to align the sequences
+      const chapterWordString = chapterWords.join(' ')
+      const whisperWordString = whisperWords.join(' ')
+      const diff = diffWords(chapterWordString, whisperWordString)
+      
+      // Build a mapping from chapter words to whisper timestamps
+      const wordTimestampMap = new Map<number, { start: number; end: number }>()
+      let chapterWordIdx = 0
+      let whisperWordIdx = 0
+      
+      for (const part of diff) {
+        const wordCount = part.value.split(/\s+/).filter(w => w.length > 0).length
         
-        if (!token.isPunctuation) {
-          // It's a word - check if it matches the current chapter word
-          const normalizedToken = token.text.toLowerCase().trim()
-          const normalizedChapterWord = chapterWords[matchIndex]?.toLowerCase().trim()
-          
-          if (normalizedToken === normalizedChapterWord) {
-            // Start or continue matching
-            isMatching = true
-            result.push(token)
-            
-            // Include any punctuation after this word
-            let nextIdx = i + 1
-            while (nextIdx < alignedTokens.length && alignedTokens[nextIdx].isPunctuation) {
-              result.push(alignedTokens[nextIdx])
-              nextIdx++
-              i++ // Skip these in outer loop
+        if (!part.added && !part.removed) {
+          // Words match - map timestamps
+          for (let i = 0; i < wordCount; i++) {
+            if (whisperWordIdx + i < relevantTimestamps.length) {
+              wordTimestampMap.set(chapterWordIdx + i, {
+                start: relevantTimestamps[whisperWordIdx + i].startTime,
+                end: relevantTimestamps[whisperWordIdx + i].endTime
+              })
             }
-            
-            matchIndex++
-            
-            // If we've matched all chapter words, we're done
-            if (matchIndex >= chapterWords.length) {
-              break
-            }
-          } else if (isMatching) {
-            // We were matching but hit a mismatch - stop
-            break
           }
+          chapterWordIdx += wordCount
+          whisperWordIdx += wordCount
+        } else if (part.removed) {
+          // Chapter has extra words that Whisper doesn't (skip without timestamps)
+          chapterWordIdx += wordCount
+        } else if (part.added) {
+          // Whisper has extra words that chapter doesn't (skip these Whisper words)
+          whisperWordIdx += wordCount
         }
       }
       
-      console.log('Matched tokens:', result.length)
-      console.log('Word tokens:', result.filter(t => !t.isPunctuation).length)
-      console.log('Expected words:', chapterWords.length)
-      console.log('First 10 tokens:', result.slice(0, 10))
-      console.log('Last 10 tokens:', result.slice(-10))
+      // Build final token array with timestamps
+      const result: AlignedToken[] = []
+      let wordCounter = 0
+      
+      for (const token of chapterTokens) {
+        if (token.isPunctuation) {
+          result.push({
+            text: token.text,
+            isPunctuation: true
+          })
+        } else {
+          const timing = wordTimestampMap.get(wordCounter)
+          if (timing) {
+            result.push({
+              text: token.text,
+              start: timing.start,
+              end: timing.end,
+              isPunctuation: false
+            })
+          } else {
+            result.push({
+              text: token.text,
+              isPunctuation: false
+            })
+          }
+          wordCounter++
+        }
+      }
+      
+      // Second pass: interpolate timestamps for unmatched words
+      for (let i = 0; i < result.length; i++) {
+        const token = result[i]
+        if (!token.isPunctuation && token.start === undefined) {
+          let prevTime: number | undefined
+          let nextTime: number | undefined
+          
+          for (let j = i - 1; j >= 0; j--) {
+            if (!result[j].isPunctuation && result[j].end !== undefined) {
+              prevTime = result[j].end
+              break
+            }
+          }
+          
+          for (let j = i + 1; j < result.length; j++) {
+            if (!result[j].isPunctuation && result[j].start !== undefined) {
+              nextTime = result[j].start
+              break
+            }
+          }
+          
+          if (prevTime !== undefined && nextTime !== undefined) {
+            const avgWordDuration = Math.min((nextTime - prevTime) / 2, 0.5)
+            token.start = prevTime + 0.05
+            token.end = token.start + avgWordDuration
+          } else if (prevTime !== undefined) {
+            token.start = prevTime + 0.05
+            token.end = token.start + 0.5
+          } else if (nextTime !== undefined) {
+            token.start = Math.max(0, nextTime - 0.55)
+            token.end = nextTime - 0.05
+          }
+        }
+      }
       
       map.set(chapterIndex, result)
     })
     
     return map
-  }, [chapters, alignedTokens])
+  }, [chapters, wordTimestamps])
 
   return (
     <>
@@ -247,23 +348,27 @@ export default function ChapterDisplay({
                       </span>
                     )
                   } else {
-                    // Render word (clickable and highlightable)
-                    const isCurrentWord = isCurrentToken(currentTime, token)
+                    // Render word (clickable and highlightable if it has timing)
+                    const hasTimestamp = token.start !== undefined
+                    const isCurrentWord = hasTimestamp && isCurrentToken(currentTime, token)
                     
                     return (
                       <span key={tokenIndex}>
                         <span
-                          className={`cursor-pointer transition-all duration-200 ${
-                            isCurrentWord
-                              ? 'bg-blue-200 text-blue-900 font-semibold px-1 rounded'
-                              : 'hover:bg-gray-200 hover:px-1 hover:rounded'
+                          className={`transition-all duration-200 ${
+                            hasTimestamp 
+                              ? 'cursor-pointer ' + (isCurrentWord
+                                  ? 'bg-blue-200 text-blue-900 font-semibold px-1 rounded'
+                                  : 'hover:bg-gray-200 hover:px-1 hover:rounded')
+                              : 'text-gray-500 cursor-default'
                           }`}
                           onClick={(e) => {
                             e.stopPropagation()
-                            if (token.start !== undefined) {
-                              onJumpToWord(token.start)
+                            if (hasTimestamp) {
+                              onJumpToWord(token.start!, chapterIndex)
                             }
                           }}
+                          title={hasTimestamp ? 'Click to jump to this word' : 'No timing available for this word'}
                         >
                           {token.text}
                         </span>

@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import OpenAI, { toFile } from 'openai'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
@@ -70,13 +70,21 @@ export async function transcribeAudio(audioUrl: string): Promise<TranscriptionRe
     await downloadFile(audioUrl, tempFilePath)
 
     console.log('Transcribing with OpenAI Whisper API...')
+    console.log('File path:', tempFilePath)
+    const fileStats = fs.statSync(tempFilePath)
+    console.log('File size:', fileStats.size, 'bytes')
     
-    // Create a read stream from the file
-    const fileStream = fs.createReadStream(tempFilePath)
+    // Verify file is not empty
+    if (fileStats.size === 0) {
+      throw new Error('Downloaded audio file is empty')
+    }
+    
+    // Use OpenAI's toFile helper for proper file upload
+    const audioFile = await toFile(fs.createReadStream(tempFilePath), fileName)
     
     // Call OpenAI Whisper API with word-level timestamps
     const transcription = await openai.audio.transcriptions.create({
-      file: fileStream,
+      file: audioFile,
       model: 'whisper-1',
       response_format: 'verbose_json',
       timestamp_granularities: ['word']
@@ -119,42 +127,21 @@ export async function transcribeAudio(audioUrl: string): Promise<TranscriptionRe
  * Build prompt for chapter generation
  */
 function buildChapterPrompt(transcriptText: string, wordTimestamps: WordTimestamp[]): string {
-  // Limit word list to prevent token limit issues
-  // ~5000 words ≈ 40K tokens (safe for 128K limit with room for response)
-  const MAX_WORDS = 5000
-  const limitedTimestamps = wordTimestamps.slice(0, MAX_WORDS)
-  
-  if (wordTimestamps.length > MAX_WORDS) {
-    const durationCovered = limitedTimestamps[limitedTimestamps.length - 1]?.endTime || 0
-    console.warn(
-      `Transcript is long (${wordTimestamps.length} words). ` +
-      `Using first ${MAX_WORDS} words (~${Math.floor(durationCovered / 60)} minutes) for chapter generation.`
-    )
-  }
-  
-  const wordTimestampInfo = limitedTimestamps.map((w, i) => 
-    `${i}: "${w.word}" (${w.startTime.toFixed(2)}s-${w.endTime.toFixed(2)}s)`
-  ).join('\n')
-  
-  return `You are an AI assistant that breaks transcripts into chapters with precise timing.
+  return `You are an AI assistant that breaks transcripts into logical chapters.
 
 Instructions:
 1. Break the transcript into individual sentences, preserving ALL punctuation and capitalization exactly as they appear.
 2. Group sentences into coherent "voice moments" or chapters based on topic or theme.
-3. For each chapter, provide the start and end word indices from the word list below.
-4. Word indices correspond to the position in the word list (0-based).
-
-Word list with timestamps:
-${wordTimestampInfo}
+3. Create 5-15 chapters depending on content length and natural breaks.
 
 Return the output as a JSON array of chapters in the following format:
 
 [
   {
-    "title": "Chapter Title",
+    "title": "Short Descriptive Chapter Title",
     "sentences": [
-      "First sentence.",
-      "Second sentence.",
+      "First sentence of chapter.",
+      "Second sentence of chapter.",
       ...
     ]
   },
@@ -215,7 +202,8 @@ function parseChapterResponse(content: string): Array<{
 }
 
 /**
- * Add timestamps to chapter data using word indices or fallback matching
+ * Add timestamps to chapter data using sequential word matching
+ * This ensures chapters don't overlap by processing them in order
  */
 function addTimestampsToChapters(
   chaptersData: Array<{
@@ -227,33 +215,30 @@ function addTimestampsToChapters(
   wordTimestamps: WordTimestamp[],
   wordIndex: Map<string, number[]>
 ): Chapter[] {
-  return chaptersData.map(chapter => {
-    let startTime = 0
-    let endTime = 0
+  const chapters: Chapter[] = []
+  let searchStartIndex = 0
+  
+  for (const chapter of chaptersData) {
+    // Match words sequentially from where the last chapter ended
+    const timestamps = findChapterTimestamps(
+      chapter.sentences, 
+      wordIndex, 
+      wordTimestamps, 
+      searchStartIndex
+    )
     
-    // Use word indices if provided by LLM (more accurate)
-    if (typeof chapter.startWordIndex === 'number' && typeof chapter.endWordIndex === 'number') {
-      const startWord = wordTimestamps[chapter.startWordIndex]
-      const endWord = wordTimestamps[chapter.endWordIndex]
-      
-      if (startWord) startTime = startWord.startTime
-      if (endWord) endTime = endWord.endTime
-    } else {
-      // Fallback to improved word matching algorithm
-      const timestamps = findChapterTimestamps(chapter.sentences, wordIndex, wordTimestamps)
-      startTime = timestamps.startTime
-      endTime = timestamps.endTime
-    }
+    // Update search position for next chapter
+    searchStartIndex = timestamps.endIndex
     
-    return {
+    chapters.push({
       title: chapter.title,
       sentences: chapter.sentences,
-      startTime,
-      endTime,
-      startWordIndex: chapter.startWordIndex,
-      endWordIndex: chapter.endWordIndex
-    }
-  })
+      startTime: timestamps.startTime,
+      endTime: timestamps.endTime
+    })
+  }
+  
+  return chapters
 }
 
 /**
@@ -269,7 +254,6 @@ export async function generateChapters(
   }
 
   try {
-    console.log('Generating chapters using OpenAI...')
     
     // Create word index for efficient lookups
     const wordIndex = createWordIndex(wordTimestamps)
@@ -286,7 +270,6 @@ export async function generateChapters(
     // Add timestamps to chapters
     const chapters = addTimestampsToChapters(chaptersData, wordTimestamps, wordIndex)
 
-    console.log(`Generated ${chapters.length} chapters`)
     return chapters
     
   } catch (error) {
@@ -314,55 +297,76 @@ function createWordIndex(wordTimestamps: WordTimestamp[]): Map<string, number[]>
 }
 
 /**
- * Find chapter timestamps using improved word matching algorithm
+ * Find chapter timestamps by matching words sequentially
+ * This ensures chapters don't overlap by tracking position in transcript
  */
 function findChapterTimestamps(
   sentences: string[],
   wordIndex: Map<string, number[]>,
-  wordTimestamps: WordTimestamp[]
-): { startTime: number; endTime: number } {
+  wordTimestamps: WordTimestamp[],
+  searchStartIndex: number = 0
+): { startTime: number; endTime: number; endIndex: number } {
   let startTime = 0
   let endTime = 0
+  let startIndex = searchStartIndex
+  let endIndex = searchStartIndex
   
-  if (sentences.length === 0) {
-    return { startTime, endTime }
+  if (sentences.length === 0 || wordTimestamps.length === 0) {
+    return { startTime, endTime, endIndex: searchStartIndex }
   }
   
-  // Find start time using first sentence
-  const firstSentence = sentences[0].toLowerCase()
-  const firstWords = firstSentence.split(/\s+/).filter(w => w.length > 0)
+  // Get all words from all sentences in this chapter
+  const chapterText = sentences.join(' ')
+  const chapterWords = chapterText.toLowerCase().split(/\s+/).filter(w => w.length > 0)
   
-  for (const word of firstWords) {
-    const cleanWord = word.replace(/[.,!?;:]/g, '')
-    const positions = wordIndex.get(cleanWord)
-    if (positions && positions.length > 0) {
-      startTime = wordTimestamps[positions[0]].startTime
+  // Try to match the first few words to find start position
+  let foundStart = false
+  const WORDS_TO_MATCH = Math.min(5, chapterWords.length)
+  
+  for (let i = searchStartIndex; i < wordTimestamps.length - WORDS_TO_MATCH; i++) {
+    let matched = 0
+    for (let j = 0; j < WORDS_TO_MATCH; j++) {
+      const transcriptWord = wordTimestamps[i + j].word.toLowerCase().replace(/[.,!?;:]/g, '')
+      const chapterWord = chapterWords[j].replace(/[.,!?;:]/g, '')
+      
+      if (transcriptWord === chapterWord) {
+        matched++
+      } else {
+        break
+      }
+    }
+    
+    // If we matched at least 3 words, we found the start
+    if (matched >= Math.min(3, WORDS_TO_MATCH)) {
+      startIndex = i
+      startTime = wordTimestamps[i].startTime
+      foundStart = true
       break
     }
   }
   
-  // Find end time using last sentence
-  const lastSentence = sentences[sentences.length - 1].toLowerCase()
-  const lastWords = lastSentence.split(/\s+/).filter(w => w.length > 0)
+  if (!foundStart) {
+    // Fallback: start from search position
+    startTime = wordTimestamps[searchStartIndex]?.startTime || 0
+    startIndex = searchStartIndex
+  }
   
-  for (let i = lastWords.length - 1; i >= 0; i--) {
-    const word = lastWords[i]
-    const cleanWord = word.replace(/[.,!?;:]/g, '')
-    const positions = wordIndex.get(cleanWord)
-    if (positions && positions.length > 0) {
-      // Use the last occurrence of this word
-      const lastPosition = positions[positions.length - 1]
-      endTime = wordTimestamps[lastPosition].endTime
-      break
+  // Now find the end by matching forward from start
+  endIndex = startIndex
+  let wordIdx = 0
+  
+  for (let i = startIndex; i < wordTimestamps.length && wordIdx < chapterWords.length; i++) {
+    const transcriptWord = wordTimestamps[i].word.toLowerCase().replace(/[.,!?;:]/g, '')
+    const chapterWord = chapterWords[wordIdx].replace(/[.,!?;:]/g, '')
+    
+    if (transcriptWord === chapterWord) {
+      endIndex = i
+      endTime = wordTimestamps[i].endTime
+      wordIdx++
     }
   }
   
-  // Fallback: if we didn't find timestamps, estimate based on position
-  if (endTime === 0 && wordTimestamps.length > 0) {
-    endTime = wordTimestamps[wordTimestamps.length - 1].endTime
-  }
-  
-  return { startTime, endTime }
+  return { startTime, endTime, endIndex: endIndex + 1 }
 }
 
 /**

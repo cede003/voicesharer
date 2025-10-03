@@ -7,7 +7,6 @@ import ChapterDisplay from './ChapterDisplay'
 import { AudioPlayerProps } from '@/types/audio'
 
 export default function AudioPlayer({ audioUrl, transcript, comments, reactions, onAddComment, onAddReaction, onPlay, onEnded, failed, processing }: AudioPlayerProps) {
-  const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [currentChapterIndex, setCurrentChapterIndex] = useState(-1)
@@ -35,22 +34,24 @@ export default function AudioPlayer({ audioUrl, transcript, comments, reactions,
     // Find the current chapter based on timestamp
     const chapterIndex = findCurrentChapterIndex(newCurrentTime, chapters)
     
-    if (chapterIndex !== -1 && chapterIndex !== currentChapterIndex) {
+    // Update chapter index if it changed
+    if (chapterIndex !== currentChapterIndex) {
+      
       setCurrentChapterIndex(chapterIndex)
       
-      // Scroll to the current chapter
-      const chapterElement = document.getElementById(`chapter-${chapterIndex}`)
-      if (chapterElement && transcriptRef.current) {
-        chapterElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center'
-        })
+      // Scroll to the current chapter if valid
+      if (chapterIndex !== -1) {
+        const chapterElement = document.getElementById(`chapter-${chapterIndex}`)
+        if (chapterElement && transcriptRef.current) {
+          chapterElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          })
+        } else {
+          console.log('    WARNING: Chapter element not found!')
+        }
       }
     }
-  }
-
-  const handleTogglePlayPause = () => {
-    setIsPlaying(prev => !prev)
   }
 
   const handleSeek = (newTime: number) => {
@@ -62,7 +63,6 @@ export default function AudioPlayer({ audioUrl, transcript, comments, reactions,
   }
 
   const handleEnded = () => {
-    setIsPlaying(false)
     setCurrentTime(0)
     setCurrentChapterIndex(-1)
     
@@ -77,7 +77,7 @@ export default function AudioPlayer({ audioUrl, transcript, comments, reactions,
 
     const targetTime = chapters[chapterIndex].startTime
     
-    // Seek the audio element - let the timeUpdate event handle setCurrentTime
+    // Seek the audio - handleTimeUpdate will detect the chapter
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (audioRef.current && (audioRef.current as any).seekAudio) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,18 +85,31 @@ export default function AudioPlayer({ audioUrl, transcript, comments, reactions,
     }
   }
 
-  const jumpToWord = (startTime: number) => {
+  const jumpToWord = (startTime: number, chapterIndex: number) => {
     // Validate the timestamp
-    if (isNaN(startTime) || startTime < 0 || startTime > duration) {
+    if (isNaN(startTime) || startTime < 0) {
       console.warn('Invalid timestamp for word jump:', startTime)
       return
     }
     
-    // Seek the audio element - let the timeUpdate event handle setCurrentTime
+    // Seek the audio
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (audioRef.current && (audioRef.current as any).seekAudio) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (audioRef.current as any).seekAudio(startTime)
+      
+      // Set to the chapter where the word is actually displayed
+      setCurrentChapterIndex(chapterIndex)
+      
+      // Scroll to that chapter
+      const chapterElement = document.getElementById(`chapter-${chapterIndex}`)
+      if (chapterElement && transcriptRef.current) {
+        console.log('Scrolling to chapter:', chapterIndex)
+        chapterElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        })
+      }
     }
   }
 
@@ -143,10 +156,8 @@ export default function AudioPlayer({ audioUrl, transcript, comments, reactions,
       {/* Audio Player Controls */}
       <AudioControls
         audioUrl={audioUrl}
-        isPlaying={isPlaying}
         currentTime={currentTime}
         duration={duration}
-        onTogglePlayPause={handleTogglePlayPause}
         onSeek={handleSeek}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}

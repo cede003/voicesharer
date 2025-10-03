@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 
 // GET /api/recordings/[id]/reactions - Get all reactions for a recording
@@ -51,6 +52,10 @@ export async function POST(
         userName: userName || null
       }
     })
+
+    // Revalidate cache for this recording and home page
+    revalidatePath(`/playback/${recordingId}`)
+    revalidatePath('/')
 
     return NextResponse.json({ reaction }, { status: 201 })
   } catch (error) {
