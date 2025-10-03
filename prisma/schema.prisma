@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Recording {
+  id           String    @id @default(uuid())
+  name         String?   // Optional: user-provided name for the recording
+  createdAt    DateTime  @default(now())
+  audioUrl     String
+  status       String    @default("pending") // pending, processing, completed, failed
+  playCount    Int       @default(0)
+  lastPlayedAt DateTime?
+  transcript   Transcript?
+  comments     Comment[]
+}
+
+model Transcript {
+  id             String   @id @default(uuid())
+  recordingId    String   @unique
+  recording      Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  fullText       String
+  wordTimestamps Json     // Array of {word, startTime, endTime}
+  chapters       Json?    // Array of {title, sentences, startTime, endTime}
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Comment {
+  id           String    @id @default(uuid())
+  recordingId  String
+  recording    Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  userName     String
+  text         String
+  timestamp    Float?    // Optional: timestamp in seconds where comment applies
+  chapterIndex Int?      // Optional: chapter index for chapter-based comments
+  parentId     String?   // For threaded replies
+  parent       Comment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      Comment[] @relation("CommentThread")
+  createdAt    DateTime  @default(now())
+  
+  @@index([recordingId])
+  @@index([parentId])
+  @@index([timestamp])
+  @@index([chapterIndex])
+}
