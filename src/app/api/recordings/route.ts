@@ -13,6 +13,19 @@ export async function GET() {
       }
     })
     
+    // Get reaction counts for all recordings
+    const reactionCounts = await prisma.reaction.groupBy({
+      by: ['recordingId'],
+      _count: {
+        id: true
+      }
+    })
+    
+    // Create a map of recordingId -> reaction count
+    const reactionCountMap = new Map(
+      reactionCounts.map(r => [r.recordingId, r._count.id])
+    )
+    
     // Calculate recording numbers based on creation order (oldest = #1)
     const totalRecordings = recordings.length
     
@@ -28,6 +41,7 @@ export async function GET() {
         analytics: {
           playCount: recording.playCount,
           commentCount: recording.comments.length,
+          reactionCount: reactionCountMap.get(recording.id) || 0,
           engagementScore: 0, // Placeholder for future implementation
           lastPlayedAt: recording.lastPlayedAt,
           shareCount: 0 // Placeholder for future implementation

@@ -6,7 +6,7 @@ import AudioControls from './AudioControls'
 import ChapterDisplay from './ChapterDisplay'
 import { AudioPlayerProps } from '@/types/audio'
 
-export default function AudioPlayer({ audioUrl, transcript, comments, onAddComment, onPlay }: AudioPlayerProps) {
+export default function AudioPlayer({ audioUrl, transcript, comments, reactions, onAddComment, onAddReaction, onPlay, onEnded, failed }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -20,12 +20,13 @@ export default function AudioPlayer({ audioUrl, transcript, comments, onAddComme
 
   // Use chapters if available, otherwise fallback to creating simple chapters
   const chapters = useMemo(() => {
+    if (failed || !transcript) return []
     if (transcript.chapters && transcript.chapters.length > 0) {
       return transcript.chapters
     }
     // Fallback: create a single chapter from full text if no chapters
     return createFallbackChapters(transcript.fullText, transcript.wordTimestamps)
-  }, [transcript.chapters, transcript.fullText, transcript.wordTimestamps])
+  }, [failed, transcript])
 
   // Handle time updates and chapter detection
   const handleTimeUpdate = (newCurrentTime: number) => {
@@ -64,6 +65,11 @@ export default function AudioPlayer({ audioUrl, transcript, comments, onAddComme
     setIsPlaying(false)
     setCurrentTime(0)
     setCurrentChapterIndex(-1)
+    
+    // Call the parent's onEnded callback if provided
+    if (onEnded) {
+      onEnded()
+    }
   }
 
   const jumpToChapter = (chapterIndex: number) => {
@@ -149,25 +155,40 @@ export default function AudioPlayer({ audioUrl, transcript, comments, onAddComme
         audioRef={audioRef}
       />
 
-      {/* Transcript - Chapter-based display with inline comments */}
-      <div ref={transcriptRef}>
-        <ChapterDisplay
-          chapters={chapters}
-          wordTimestamps={transcript.wordTimestamps}
-          currentTime={currentTime}
-          currentChapterIndex={currentChapterIndex}
-          comments={comments}
-          showCommentForm={showCommentForm}
-          replyToComment={replyToComment}
-          isSubmitting={isSubmitting}
-          onJumpToChapter={jumpToChapter}
-          onJumpToWord={jumpToWord}
-          onToggleCommentForm={handleToggleCommentForm}
-          onSubmitComment={handleSubmitComment}
-          onReply={handleReply}
-          onCancelReply={handleCancelReply}
-        />
-      </div>
+      {/* Show error message if transcription failed */}
+      {failed ? (
+        <div className="mt-6 bg-red-100 text-red-800 px-6 py-4 rounded-lg text-center">
+          <h3 className="text-lg font-semibold mb-2">
+            Transcription Failed
+          </h3>
+          <p>
+            We encountered an error while transcribing your recording. 
+            You can still listen to the audio above.
+          </p>
+        </div>
+      ) : transcript ? (
+        /* Transcript - Chapter-based display with inline comments */
+        <div ref={transcriptRef}>
+          <ChapterDisplay
+            chapters={chapters}
+            wordTimestamps={transcript.wordTimestamps}
+            currentTime={currentTime}
+            currentChapterIndex={currentChapterIndex}
+            comments={comments}
+            reactions={reactions}
+            showCommentForm={showCommentForm}
+            replyToComment={replyToComment}
+            isSubmitting={isSubmitting}
+            onJumpToChapter={jumpToChapter}
+            onJumpToWord={jumpToWord}
+            onToggleCommentForm={handleToggleCommentForm}
+            onSubmitComment={handleSubmitComment}
+            onReply={handleReply}
+            onCancelReply={handleCancelReply}
+            onAddReaction={onAddReaction}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

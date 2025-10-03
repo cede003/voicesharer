@@ -7,6 +7,7 @@ import AudioPlayer from '@/components/AudioPlayer'
 import TranscriptChat from '@/components/TranscriptChat'
 import { Comment } from '@/types/comment'
 import { Recording } from '@/types/recording'
+import { Reaction } from '@/types/reaction'
 
 export default function PlaybackPage() {
   const params = useParams()
@@ -15,10 +16,13 @@ export default function PlaybackPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
+  const [reactions, setReactions] = useState<Reaction[]>([])
   const [isLoadingComments, setIsLoadingComments] = useState(true)
-  const [hasTrackedPlay, setHasTrackedPlay] = useState(false)
+  const [isLoadingReactions, setIsLoadingReactions] = useState(true)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showCopyNotification, setShowCopyNotification] = useState(false)
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [editedTitle, setEditedTitle] = useState('')
 
   useEffect(() => {
     const fetchRecording = async () => {
@@ -56,9 +60,24 @@ export default function PlaybackPage() {
       }
     }
 
+    const fetchReactions = async () => {
+      try {
+        const response = await fetch(`/api/recordings/${params.id}/reactions`)
+        if (response.ok) {
+          const data = await response.json()
+          setReactions(data.reactions)
+        }
+      } catch (error) {
+        console.error('Error fetching reactions:', error)
+      } finally {
+        setIsLoadingReactions(false)
+      }
+    }
+
     if (params.id) {
       fetchRecording()
       fetchComments()
+      fetchReactions()
     }
   }, [params.id])
 
@@ -94,6 +113,26 @@ export default function PlaybackPage() {
     }
   }
 
+  const downloadTranscript = () => {
+    if (!recording?.transcript) return
+
+    const fileName = recording.name 
+      ? `${recording.name} - transcript.txt`
+      : `Recording-${recording.recordingNumber || recording.id} - transcript.txt`
+    
+    const transcriptText = recording.transcript.fullText
+    const blob = new Blob([transcriptText], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   const handleDeleteRecording = async () => {
     if (!recording) return
     
@@ -124,9 +163,12 @@ export default function PlaybackPage() {
   }
 
   const handlePlay = async () => {
-    // Only track the first play per page visit
-    if (hasTrackedPlay) return
-    
+    // This is called on the first play, but we don't increment the count here
+    // We only increment when the audio is played all the way through (in handleEnded)
+  }
+
+  const handleEnded = async () => {
+    // Track completion - increment play count when audio finishes
     try {
       const response = await fetch(`/api/recordings/${params.id}/play`, {
         method: 'POST'
@@ -134,7 +176,6 @@ export default function PlaybackPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setHasTrackedPlay(true)
         
         // Update local recording state with new play count
         if (recording) {
@@ -146,8 +187,8 @@ export default function PlaybackPage() {
         }
       }
     } catch (error) {
-      console.error('Error tracking play:', error)
-      // Don't throw - this shouldn't block playback
+      console.error('Error tracking completion:', error)
+      // Don't throw - this shouldn't affect user experience
     }
   }
 
@@ -183,6 +224,70 @@ export default function PlaybackPage() {
     } catch (error) {
       console.error('Error adding comment:', error)
       throw error
+    }
+  }
+
+  const handleAddReaction = async (chapterIndex: number, emoji: string, userName?: string) => {
+    try {
+      const response = await fetch(`/api/recordings/${params.id}/reactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chapterIndex, emoji, userName })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to add reaction')
+      }
+
+      const data = await response.json()
+      
+      // Update reactions list
+      setReactions(prevReactions => [...prevReactions, data.reaction])
+    } catch (error) {
+      console.error('Error adding reaction:', error)
+      throw error
+    }
+  }
+
+  const handleTitleClick = () => {
+    if (recording) {
+      setEditedTitle(recording.name || '')
+      setIsEditingTitle(true)
+    }
+  }
+
+  const handleTitleSave = async () => {
+    if (!recording || editedTitle === recording.name) {
+      setIsEditingTitle(false)
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/recordings/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editedTitle })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update recording name')
+      }
+
+      const data = await response.json()
+      setRecording(data)
+      setIsEditingTitle(false)
+    } catch (error) {
+      console.error('Error updating recording name:', error)
+      alert('Failed to update recording name')
+    }
+  }
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleTitleSave()
+    } else if (e.key === 'Escape') {
+      setIsEditingTitle(false)
     }
   }
 
@@ -234,9 +339,26 @@ export default function PlaybackPage() {
 
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            {recording.name || (recording.recordingNumber ? `Recording #${recording.recordingNumber}` : 'Untitled Recording')}
-          </h1>
+          {isEditingTitle ? (
+            <input
+              type="text"
+              value={editedTitle}
+              onChange={(e) => setEditedTitle(e.target.value)}
+              onBlur={handleTitleSave}
+              onKeyDown={handleTitleKeyDown}
+              autoFocus
+              className="text-3xl font-bold text-gray-800 mb-2 text-center bg-transparent border-b-2 border-blue-500 focus:outline-none px-2"
+              placeholder="Enter recording name"
+            />
+          ) : (
+            <h1 
+              className="text-3xl font-bold text-gray-800 mb-2 cursor-pointer hover:text-blue-600 transition-colors inline-block"
+              onClick={handleTitleClick}
+              title="Click to edit"
+            >
+              {recording.name || (recording.recordingNumber ? `Recording #${recording.recordingNumber}` : 'Untitled Recording')}
+            </h1>
+          )}
           <div className="flex items-center justify-center space-x-4 text-sm text-gray-600 mb-2">
             <span>Recorded: {new Date(recording.createdAt).toLocaleString()}</span>
             <span>•</span>
@@ -269,6 +391,13 @@ export default function PlaybackPage() {
               </svg>
               <span>{recording.commentCount} {recording.commentCount === 1 ? 'comment' : 'comments'}</span>
             </div>
+            <span>•</span>
+            <div className="flex items-center space-x-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{reactions.length} {reactions.length === 1 ? 'reaction' : 'reactions'}</span>
+            </div>
             {recording.lastPlayedAt && (
               <>
                 <span>•</span>
@@ -296,6 +425,19 @@ export default function PlaybackPage() {
               <span>Copy Share Link</span>
             </button>
             
+            {/* Download Transcript Button - only show if transcription succeeded */}
+            {recording.status === 'completed' && recording.transcript && (
+              <button
+                onClick={downloadTranscript}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center space-x-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Download Transcript</span>
+              </button>
+            )}
+            
             <button
               onClick={handleDeleteRecording}
               disabled={isDeleting}
@@ -314,32 +456,7 @@ export default function PlaybackPage() {
         </div>
 
         {/* Audio Player and Transcript */}
-        {recording.status === 'completed' && recording.transcript ? (
-          isLoadingComments ? (
-            <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-              <p className="text-gray-600 text-sm">Loading comments...</p>
-            </div>
-          ) : (
-            <>
-              <AudioPlayer 
-                audioUrl={recording.audioUrl}
-                transcript={recording.transcript}
-                comments={comments}
-                onAddComment={handleAddComment}
-                onPlay={handlePlay}
-              />
-              
-              {/* AI Q&A Chat */}
-              <TranscriptChat 
-                key={recording.id}
-                transcript={recording.transcript}
-                recordingName={recording.name || undefined}
-                comments={comments}
-              />
-            </>
-          )
-        ) : recording.status === 'processing' ? (
+        {recording.status === 'processing' ? (
           <div className="bg-white rounded-lg shadow-lg p-8 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <h3 className="text-lg font-semibold text-gray-800 mb-2">
@@ -352,18 +469,37 @@ export default function PlaybackPage() {
               The page will automatically refresh when ready.
             </p>
           </div>
-        ) : recording.status === 'failed' ? (
-          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-            <div className="bg-red-100 text-red-800 px-6 py-4 rounded-lg">
-              <h3 className="text-lg font-semibold mb-2">
-                Transcription Failed
-              </h3>
-              <p>
-                We encountered an error while processing your recording. 
-                Please try recording again.
-              </p>
+        ) : recording.status === 'completed' || recording.status === 'failed' ? (
+          isLoadingComments || isLoadingReactions ? (
+            <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-gray-600 text-sm">Loading...</p>
             </div>
-          </div>
+          ) : (
+            <>
+              <AudioPlayer 
+                audioUrl={recording.audioUrl}
+                transcript={recording.transcript || undefined}
+                comments={comments}
+                reactions={reactions}
+                onAddComment={handleAddComment}
+                onAddReaction={handleAddReaction}
+                onPlay={handlePlay}
+                onEnded={handleEnded}
+                failed={recording.status === 'failed'}
+              />
+              
+              {/* AI Q&A Chat - only show if transcription succeeded */}
+              {recording.status === 'completed' && recording.transcript && (
+                <TranscriptChat 
+                  key={recording.id}
+                  transcript={recording.transcript}
+                  recordingName={recording.name || undefined}
+                  comments={comments}
+                />
+              )}
+            </>
+          )
         ) : (
           <div className="bg-white rounded-lg shadow-lg p-8 text-center">
             <p className="text-gray-600">

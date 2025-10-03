@@ -21,6 +21,7 @@ interface Recording {
   analytics: {
     playCount: number
     commentCount: number
+    reactionCount: number
     engagementScore: number
     lastPlayedAt: string | null
     shareCount: number
@@ -265,6 +266,13 @@ export default function Home() {
                               </svg>
                               <span className="font-medium">{recording.analytics.commentCount}</span>
                               <span className="text-gray-500">comments</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="font-medium">{recording.analytics.reactionCount}</span>
+                              <span className="text-gray-500">reactions</span>
                             </span>
                             {recording.analytics.lastPlayedAt && (
                               <span className="flex items-center space-x-1">

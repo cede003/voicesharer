@@ -55,3 +55,15 @@ model Comment {
   @@index([timestamp])
   @@index([chapterIndex])
 }
+
+model Reaction {
+  id           String   @id @default(uuid())
+  recordingId  String
+  chapterIndex Int
+  emoji        String
+  userName     String?  // Optional: track who added the reaction
+  createdAt    DateTime @default(now())
+  
+  @@index([recordingId, chapterIndex])
+  @@index([recordingId])
+}

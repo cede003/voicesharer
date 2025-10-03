@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import { formatTime } from '@/utils/audioUtils'
 import { getWordsWithPunctuation, isCurrentToken, AlignedToken } from '@/utils/alignTranscript'
 import CommentList from './CommentList'
 import CommentForm from './CommentForm'
-import { Comment, ChapterDisplayProps } from '@/types'
+import ReactionPicker from './ReactionPicker'
+import { Comment, ChapterDisplayProps, Reaction, ReactionGroup } from '@/types'
 
 export default function ChapterDisplay({
   chapters,
@@ -13,6 +14,7 @@ export default function ChapterDisplay({
   currentTime,
   currentChapterIndex,
   comments,
+  reactions,
   showCommentForm,
   replyToComment,
   isSubmitting,
@@ -21,10 +23,17 @@ export default function ChapterDisplay({
   onToggleCommentForm,
   onSubmitComment,
   onReply,
-  onCancelReply
+  onCancelReply,
+  onAddReaction
 }: ChapterDisplayProps) {
   // State to track which chapters have their comments expanded
   const [expandedComments, setExpandedComments] = useState<Set<number>>(new Set())
+  // State to track which chapter's reaction picker is open
+  const [showReactionPicker, setShowReactionPicker] = useState<number | null>(null)
+  // State to track the picker position
+  const [pickerPosition, setPickerPosition] = useState<{ top?: number; bottom?: number; left?: number; right?: number }>({})
+  // Ref to store the reaction button elements
+  const reactionButtonRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
 
   const toggleCommentsExpanded = (chapterIndex: number) => {
     setExpandedComments(prev => {
@@ -43,6 +52,32 @@ export default function ChapterDisplay({
     return comments.reduce((total, comment) => {
       return total + 1 + countTotalComments(comment.replies || [])
     }, 0)
+  }
+
+  // Helper function to group reactions by emoji
+  const groupReactions = (reactions: Reaction[]): ReactionGroup[] => {
+    const groups = new Map<string, { count: number; users: string[] }>()
+    
+    reactions.forEach(reaction => {
+      const existing = groups.get(reaction.emoji)
+      if (existing) {
+        existing.count++
+        if (reaction.userName) {
+          existing.users.push(reaction.userName)
+        }
+      } else {
+        groups.set(reaction.emoji, {
+          count: 1,
+          users: reaction.userName ? [reaction.userName] : []
+        })
+      }
+    })
+
+    return Array.from(groups.entries()).map(([emoji, data]) => ({
+      emoji,
+      count: data.count,
+      users: data.users
+    }))
   }
 
   // Get aligned tokens with punctuation separated from the FULL transcript
@@ -130,6 +165,7 @@ export default function ChapterDisplay({
   }, [chapters, alignedTokens])
 
   return (
+    <>
     <div className="mt-6 space-y-6">
       <h3 className="text-xl font-semibold text-gray-900">Transcript</h3>
       
@@ -138,6 +174,8 @@ export default function ChapterDisplay({
         const chapterTokens = chapterTokensMap.get(chapterIndex) || []
         const chapterComments = comments.filter(c => c.chapterIndex === chapterIndex && !c.parentId)
         const totalCommentCount = countTotalComments(chapterComments)
+        const chapterReactions = reactions.filter(r => r.chapterIndex === chapterIndex)
+        const groupedReactions = groupReactions(chapterReactions)
         
         return (
           <div
@@ -147,26 +185,54 @@ export default function ChapterDisplay({
               isActive ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
             } border rounded-lg p-4`}
           >
-            {/* Chapter header */}
-            <div 
-              className="flex items-start gap-3 mb-3 cursor-pointer"
-              onClick={() => onJumpToChapter(chapterIndex)}
-            >
-              <span className={`text-sm font-mono ${
-                isActive ? 'text-blue-600' : 'text-gray-500'
-              }`}>
-                {formatTime(chapter.startTime)}
-              </span>
-              <h4 className={`font-medium ${
-                isActive ? 'text-blue-900' : 'text-gray-700'
-              }`}>
-                {chapter.title}
-              </h4>
+            {/* Chapter header with timestamp, title, and reactions */}
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex items-start gap-3 flex-1">
+                <span 
+                  className={`text-sm font-mono cursor-pointer flex-shrink-0 w-[2.75rem] ${
+                    isActive ? 'text-blue-600' : 'text-gray-500'
+                  }`}
+                  onClick={() => onJumpToChapter(chapterIndex)}
+                >
+                  {formatTime(chapter.startTime)}
+                </span>
+                
+                <h4 
+                  className={`font-medium cursor-pointer ${
+                    isActive ? 'text-blue-900' : 'text-gray-700'
+                  }`}
+                  onClick={() => onJumpToChapter(chapterIndex)}
+                >
+                  {chapter.title}
+                </h4>
+              </div>
+
+              {/* Reactions row - horizontal, top right */}
+              {groupedReactions.length > 0 && (
+                <div className="reactions-scroll flex items-center gap-2 max-w-xs overflow-x-auto pb-1">
+                  {groupedReactions.map((reactionGroup, idx) => (
+                    <div 
+                      key={idx}
+                      className="flex items-center gap-1 flex-shrink-0"
+                      title={reactionGroup.users.length > 0 ? reactionGroup.users.join(', ') : undefined}
+                    >
+                      <span className="text-lg">{reactionGroup.emoji}</span>
+                      {reactionGroup.count > 1 && (
+                        <span className="text-xs text-gray-600 font-medium">
+                          {reactionGroup.count}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Interactive transcript with words and punctuation */}
-            <div className="ml-14 mb-4">
-              <p className="text-gray-800 leading-relaxed">
+            <div className="flex gap-3 mb-4">
+              <div className="w-[2.75rem] flex-shrink-0"></div>
+              <div className="flex-1">
+                <p className="text-gray-800 leading-relaxed">
                 {chapterTokens.map((token, tokenIndex) => {
                   const nextToken = chapterTokens[tokenIndex + 1]
                   const shouldAddSpace = tokenIndex < chapterTokens.length - 1 && 
@@ -207,16 +273,19 @@ export default function ChapterDisplay({
                   }
                 })}
               </p>
+              </div>
             </div>
 
             {/* Comments section */}
-            <div className="ml-14">
-              {/* Comment count and toggle button */}
+            <div className="flex gap-3">
+              <div className="w-[2.75rem] flex-shrink-0"></div>
+              <div className="flex-1">
+              {/* Comment count and toggle button with Add Reaction */}
               {totalCommentCount > 0 && (
-                <div className="mb-2">
+                <div className="mb-2 flex items-center gap-3">
                   <button
                     onClick={() => toggleCommentsExpanded(chapterIndex)}
-                    className="flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 font-medium transition-colors"
+                    className="flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 font-medium transition-colors cursor-pointer"
                   >
                     <svg 
                       className={`w-4 h-4 transition-transform ${expandedComments.has(chapterIndex) ? 'rotate-90' : ''}`}
@@ -230,6 +299,23 @@ export default function ChapterDisplay({
                       {totalCommentCount} {totalCommentCount === 1 ? 'Comment' : 'Comments'}
                     </span>
                   </button>
+                  <span className="text-gray-400">•</span>
+                  <button
+                    ref={(el) => {
+                      if (el) reactionButtonRefs.current.set(chapterIndex, el)
+                    }}
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      setPickerPosition({
+                        top: rect.bottom + 8,
+                        left: rect.left,
+                      })
+                      setShowReactionPicker(chapterIndex)
+                    }}
+                    className="text-sm text-purple-600 hover:text-purple-700 font-medium transition-colors cursor-pointer"
+                  >
+                    + Add Reaction
+                  </button>
                 </div>
               )}
 
@@ -240,7 +326,7 @@ export default function ChapterDisplay({
                   <div>
                     <button
                       onClick={() => onToggleCommentForm(chapterIndex)}
-                      className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors cursor-pointer"
                     >
                       {showCommentForm === chapterIndex ? 'Cancel' : '+ Add Comment'}
                     </button>
@@ -274,15 +360,34 @@ export default function ChapterDisplay({
                 </div>
               )}
 
-              {/* Show add comment button when collapsed and no comments exist */}
-              {!expandedComments.has(chapterIndex) && totalCommentCount === 0 && (
+              {/* Show add comment and reaction buttons when there are no comments */}
+              {totalCommentCount === 0 && (
                 <div>
-                  <button
-                    onClick={() => onToggleCommentForm(chapterIndex)}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-                  >
-                    {showCommentForm === chapterIndex ? 'Cancel' : '+ Add Comment'}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => onToggleCommentForm(chapterIndex)}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors cursor-pointer"
+                    >
+                      {showCommentForm === chapterIndex ? 'Cancel' : '+ Add Comment'}
+                    </button>
+                    <span className="text-gray-400">•</span>
+                    <button
+                      ref={(el) => {
+                        if (el) reactionButtonRefs.current.set(chapterIndex + 1000, el)
+                      }}
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setPickerPosition({
+                          top: rect.bottom + 8,
+                          left: rect.left,
+                        })
+                        setShowReactionPicker(chapterIndex)
+                      }}
+                      className="text-sm text-purple-600 hover:text-purple-700 font-medium transition-colors cursor-pointer"
+                    >
+                      + Add Reaction
+                    </button>
+                  </div>
 
                   {showCommentForm === chapterIndex && !replyToComment && (
                     <div className="mt-2">
@@ -295,11 +400,25 @@ export default function ChapterDisplay({
                   )}
                 </div>
               )}
+              </div>
             </div>
           </div>
         )
       })}
+
     </div>
+
+    {/* Reaction Picker - rendered outside to avoid layout shifts */}
+    {showReactionPicker !== null && (
+      <ReactionPicker
+        onSelectEmoji={(emoji) => {
+          onAddReaction(showReactionPicker, emoji)
+        }}
+        onClose={() => setShowReactionPicker(null)}
+        position={pickerPosition}
+      />
+    )}
+    </>
   )
 }
 

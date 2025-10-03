@@ -65,6 +65,63 @@ export async function GET(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: recordingId } = await params
+    const body = await request.json()
+    const { name } = body
+
+    if (name === undefined) {
+      return NextResponse.json(
+        { error: 'Name is required' },
+        { status: 400 }
+      )
+    }
+
+    // Update the recording name
+    const updatedRecording = await prisma.recording.update({
+      where: { id: recordingId },
+      data: { name: name || null },
+      include: {
+        transcript: true,
+        comments: true
+      }
+    })
+
+    // Calculate recording number if no name provided
+    let recordingNumber = null
+    if (!updatedRecording.name) {
+      const allRecordings = await prisma.recording.findMany({
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, createdAt: true }
+      })
+      recordingNumber = allRecordings.findIndex(r => r.id === recordingId) + 1
+    }
+
+    return NextResponse.json({
+      id: updatedRecording.id,
+      name: updatedRecording.name,
+      audioUrl: updatedRecording.audioUrl,
+      status: updatedRecording.status,
+      createdAt: updatedRecording.createdAt,
+      playCount: updatedRecording.playCount,
+      lastPlayedAt: updatedRecording.lastPlayedAt,
+      transcript: updatedRecording.transcript,
+      commentCount: updatedRecording.comments.length,
+      recordingNumber
+    })
+  } catch (error) {
+    console.error('Error updating recording:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

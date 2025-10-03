@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 
 /**
  * OpenAI Whisper API integration for audio transcription
@@ -55,8 +56,8 @@ export async function transcribeAudio(audioUrl: string): Promise<TranscriptionRe
   let tempFilePath: string | null = null
 
   try {
-    // Create temp directory if it doesn't exist
-    const tempDir = path.join(process.cwd(), 'temp')
+    // Use OS temp directory (works in serverless environments like Lambda)
+    const tempDir = os.tmpdir()
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true })
     }

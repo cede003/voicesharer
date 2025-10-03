@@ -163,19 +163,13 @@ export default function AudioRecorder({ onRecordingComplete, onError, onRecordin
               onChange={(e) => onRecordingNameChange(e.target.value)}
               placeholder="e.g., Team Meeting Notes, Quick Memo..."
               maxLength={100}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
               disabled={isUploading}
             />
             <p className="text-xs text-gray-500 mt-1">
               Give your recording a memorable name
             </p>
           </div>
-        )}
-        
-        {recordingName && !isRecording && (
-          <p className="text-lg text-blue-600 font-medium mb-2">
-            &ldquo;{recordingName}&rdquo;
-          </p>
         )}
         {isRecording && (
           <div className="text-3xl font-mono text-red-600 mb-2">

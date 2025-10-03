@@ -1,0 +1,101 @@
+/* Custom styling for react-h5-audio-player */
+
+/* Container - full width, no background, flush with UI */
+.rhap_container {
+  width: 100% !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+/* Controls section - fixed width on the left */
+.rhap_controls-section {
+  flex: 0 0 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+/* Main controls (play/pause button) - fixed size */
+.rhap_main-controls {
+  flex: 0 0 auto !important;
+}
+
+/* Style the play/pause button - solid blue circle with white icon */
+.rhap_main-controls-button {
+  background-color: #3B82F6 !important; /* Solid blue circle - Tailwind blue-600 */
+  color: white !important;
+  border: none !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background-color 0.2s !important;
+}
+
+.rhap_main-controls-button:hover {
+  background-color: #2563EB !important; /* Tailwind blue-700 on hover */
+}
+
+/* Style the icon - white color, no background */
+.rhap_main-controls-button svg {
+  background: none !important;
+  background-color: transparent !important;
+  color: white !important;
+  fill: white !important;
+  width: 24px !important;
+  height: 24px !important;
+}
+
+/* Progress section - expand to fill remaining width as direct child of container */
+.rhap_progress-section {
+  flex: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+/* Progress container - take up all available space within progress section */
+.rhap_progress-container {
+  flex: 1 !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+}
+
+/* Make progress bar blue */
+.rhap_progress-filled,
+.rhap_progress-indicator {
+  background-color: #3B82F6 !important; /* Tailwind blue-600 */
+}
+
+.rhap_progress-bar {
+  background-color: #E5E7EB !important; /* Tailwind gray-200 */
+}
+
+/* Style the time display */
+.rhap_time {
+  color: #4B5563 !important; /* Tailwind gray-600 */
+  font-size: 0.875rem !important; /* text-sm */
+  min-width: 48px !important;
+  text-align: center !important;
+}
+
+/* Hide volume and additional controls */
+.rhap_volume-controls {
+  display: none !important;
+}
+
+.rhap_additional-controls {
+  display: none !important;
+}
+

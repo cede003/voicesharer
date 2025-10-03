@@ -1,5 +1,6 @@
 import { RefObject } from 'react'
 import { Comment } from './comment'
+import { Reaction } from './reaction'
 
 // Core audio data structures
 export interface WordTimestamp {
@@ -26,10 +27,14 @@ export interface Transcript {
 // Component props interfaces
 export interface AudioPlayerProps {
   audioUrl: string
-  transcript: Transcript
+  transcript?: Transcript
   comments: Comment[]
+  reactions: Reaction[]
   onAddComment: (userName: string, text: string, timestamp: number | null, chapterIndex: number | null, parentId?: string) => Promise<void>
+  onAddReaction: (chapterIndex: number, emoji: string, userName?: string) => Promise<void>
   onPlay?: () => void
+  onEnded?: () => void
+  failed?: boolean
 }
 
 export interface AudioControlsProps {
@@ -61,6 +66,7 @@ export interface ChapterDisplayProps {
   currentTime: number
   currentChapterIndex: number
   comments: Comment[]
+  reactions: Reaction[]
   showCommentForm: number | null
   replyToComment: string | null
   isSubmitting: boolean
@@ -70,5 +76,6 @@ export interface ChapterDisplayProps {
   onSubmitComment: (userName: string, text: string, chapterIndex: number, parentId?: string) => Promise<void>
   onReply: (commentId: string, chapterIndex: number) => void
   onCancelReply: () => void
+  onAddReaction: (chapterIndex: number, emoji: string, userName?: string) => Promise<void>
 }
 
