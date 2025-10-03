@@ -456,56 +456,52 @@ export default function PlaybackPage() {
         </div>
 
         {/* Audio Player and Transcript */}
-        {recording.status === 'processing' ? (
+        {isLoadingComments || isLoadingReactions ? (
           <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">
-              Processing Your Recording
-            </h3>
-            <p className="text-gray-600">
-              We&apos;re transcribing your audio. This usually takes a few moments.
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              The page will automatically refresh when ready.
-            </p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+            <p className="text-gray-600 text-sm">Loading...</p>
           </div>
-        ) : recording.status === 'completed' || recording.status === 'failed' ? (
-          isLoadingComments || isLoadingReactions ? (
-            <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-              <p className="text-gray-600 text-sm">Loading...</p>
-            </div>
-          ) : (
-            <>
-              <AudioPlayer 
-                audioUrl={recording.audioUrl}
-                transcript={recording.transcript || undefined}
-                comments={comments}
-                reactions={reactions}
-                onAddComment={handleAddComment}
-                onAddReaction={handleAddReaction}
-                onPlay={handlePlay}
-                onEnded={handleEnded}
-                failed={recording.status === 'failed'}
-              />
-              
-              {/* AI Q&A Chat - only show if transcription succeeded */}
-              {recording.status === 'completed' && recording.transcript && (
-                <TranscriptChat 
-                  key={recording.id}
-                  transcript={recording.transcript}
-                  recordingName={recording.name || undefined}
-                  comments={comments}
-                />
-              )}
-            </>
-          )
         ) : (
-          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-            <p className="text-gray-600">
-              Your recording is being prepared. Please wait...
-            </p>
-          </div>
+          <>
+            {/* Processing notification banner */}
+            {recording.status === 'processing' && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-center">
+                <div className="flex items-center justify-center space-x-3">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-600"></div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-yellow-800">
+                      Transcription in progress
+                    </p>
+                    <p className="text-xs text-yellow-600">
+                      You can listen to the audio while we process the transcript
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <AudioPlayer 
+              audioUrl={recording.audioUrl}
+              transcript={recording.transcript || undefined}
+              comments={comments}
+              reactions={reactions}
+              onAddComment={handleAddComment}
+              onAddReaction={handleAddReaction}
+              onPlay={handlePlay}
+              onEnded={handleEnded}
+              failed={recording.status === 'failed'}
+            />
+            
+            {/* AI Q&A Chat - only show if transcription succeeded */}
+            {recording.status === 'completed' && recording.transcript && (
+              <TranscriptChat 
+                key={recording.id}
+                transcript={recording.transcript}
+                recordingName={recording.name || undefined}
+                comments={comments}
+              />
+            )}
+          </>
         )}
 
         {/* Navigation */}
