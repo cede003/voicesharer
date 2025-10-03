@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@/generated/prisma'
 import { transcribeAudio, generateChapters } from '@/lib/transcription'
 
+// Increase timeout for transcription (max 60s on Vercel Hobby, 300s on Pro)
+export const maxDuration = 60
+
 // This endpoint can be called by Vercel Cron Jobs or external services
 // to process pending transcriptions
 export async function POST(request: NextRequest) {
